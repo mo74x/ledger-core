@@ -32,14 +32,14 @@ export class LedgerService {
       throw new BadRequestException('Transfer amount must be positive');
     }
     if (idempotencyKey) {
-      const existingTx = await this.prisma.transaction.findUnique({
+      const existingTx = await this.prisma.client.transaction.findUnique({
         where: { idempotencyKey },
       });
       if (existingTx)
         throw new ConflictException('Transaction already processed');
     }
 
-    return await this.prisma.$transaction(async (tx) => {
+    return await this.prisma.client.$transaction(async (tx) => {
       const transactionRecord = await tx.transaction.create({
         data: {
           description,
@@ -71,7 +71,7 @@ export class LedgerService {
 
   async getBalance(accountId: string): Promise<string> {
     // We aggregate directly in the database for speed
-    const result = await this.prisma.entry.groupBy({
+    const result = await this.prisma.client.entry.groupBy({
       by: ['accountId', 'direction'],
       where: { accountId },
       _sum: { amount: true },
