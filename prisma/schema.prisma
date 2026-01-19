@@ -1,0 +1,45 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id        String   @id @default(uuid())
+  name      String
+  ledger    String   
+  createdAt DateTime @default(now())
+  entries   Entry[]
+
+  @@unique([name, ledger])
+}
+
+model Transaction {
+  id             String   @id @default(uuid())
+  description    String
+  postedAt       DateTime @default(now())
+  idempotencyKey String?  @unique 
+  entries        Entry[]
+}
+
+model Entry {
+  id            String      @id @default(uuid())
+  amount        Decimal     @db.Decimal(20, 2) 
+  direction     EntryDirection 
+  account       Account     @relation(fields: [accountId], references: [id])
+  accountId     String
+  
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  transactionId String
+
+  @@index([accountId])
+}
+
+enum EntryDirection {
+  DEBIT
+  CREDIT
+}
