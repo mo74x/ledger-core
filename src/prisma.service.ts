@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
@@ -11,28 +12,32 @@ import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService implements OnModuleInit, OnModuleDestroy {
-    private pool: Pool;
-    private _client: PrismaClient;
+  $transaction(arg0: (tx: any) => Promise<any>) {
+    throw new Error('Method not implemented.');
+  }
+  private pool: Pool;
+  private _client: PrismaClient;
+  transaction: any;
 
-    constructor() {
-        this.pool = new Pool({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false },
-        });
-        const adapter = new PrismaPg(this.pool);
-        this._client = new PrismaClient({ adapter });
-    }
+  constructor() {
+    this.pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    });
+    const adapter = new PrismaPg(this.pool);
+    this._client = new PrismaClient({ adapter });
+  }
 
-    get client(): PrismaClient {
-        return this._client;
-    }
+  get client(): PrismaClient {
+    return this._client;
+  }
 
-    async onModuleInit() {
-        await this._client.$connect();
-    }
+  async onModuleInit() {
+    await this._client.$connect();
+  }
 
-    async onModuleDestroy() {
-        await this._client.$disconnect();
-        await this.pool.end();
-    }
+  async onModuleDestroy() {
+    await this._client.$disconnect();
+    await this.pool.end();
+  }
 }

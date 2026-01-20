@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/await-thenable */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
@@ -31,32 +32,59 @@ export class LedgerService {
     if (transferAmount.isNegative() || transferAmount.isZero()) {
       throw new BadRequestException('Transfer amount must be positive');
     }
+
+    // 1. Idempotency Check (As before)
     if (idempotencyKey) {
-      const existingTx = await this.prisma.client.transaction.findUnique({
+      const existingTx = await this.prisma.transaction.findUnique({
         where: { idempotencyKey },
       });
       if (existingTx)
         throw new ConflictException('Transaction already processed');
     }
 
-    return await this.prisma.client.$transaction(async (tx) => {
-      const transactionRecord = await tx.transaction.create({
-        data: {
-          description,
-          idempotencyKey,
-          postedAt: new Date(),
-        },
+    return await this.prisma.$transaction(async (tx) => {
+      // --- NEW: ATOMIC BALANCE CHECK ---
+
+      // Calculate current balance INSIDE the transaction.
+      // This effectively "locks" the state because we are inside a transaction.
+      const entries = await tx.entry.groupBy({
+        by: ['direction'],
+        where: { accountId: fromAccountId },
+        _sum: { amount: true },
       });
 
+      let currentBalance = new Decimal(0);
+      entries.forEach((e) => {
+        const val = new Decimal(e._sum.amount || 0);
+        if (e.direction === 'CREDIT') currentBalance = currentBalance.plus(val);
+        else currentBalance = currentBalance.minus(val);
+      });
+
+      // Check if they have enough money
+      if (currentBalance.lessThan(transferAmount)) {
+        throw new BadRequestException(
+          `Insufficient funds. Available: ${currentBalance.toFixed(2)}`,
+        );
+      }
+
+      // --- END NEW CHECK ---
+
+      // 2. Create Transaction Header
+      const transactionRecord = await tx.transaction.create({
+        data: { description, idempotencyKey, postedAt: new Date() },
+      });
+
+      // 3. DEBIT Sender
       await tx.entry.create({
         data: {
           transactionId: transactionRecord.id,
           accountId: fromAccountId,
           direction: 'DEBIT',
-          amount: transferAmount, // Prisma handles Decimal conversion
+          amount: transferAmount,
         },
       });
 
+      // 4. CREDIT Receiver
       await tx.entry.create({
         data: {
           transactionId: transactionRecord.id,
@@ -65,6 +93,7 @@ export class LedgerService {
           amount: transferAmount,
         },
       });
+
       return transactionRecord;
     });
   }
